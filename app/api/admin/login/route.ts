@@ -1,0 +1,4 @@
+import { NextResponse } from 'next/server';
+import { createAdminSession, ADMIN_COOKIE } from '@/lib/admin-auth';
+export const runtime='nodejs';
+export async function POST(req:Request) { try { const body=await req.json(); const password=process.env.ADMIN_PASSWORD; if(!password || typeof body?.password!=='string') return NextResponse.json({error:'Login não configurado.'},{status:503}); const a=Buffer.from(body.password), b=Buffer.from(password); const {timingSafeEqual}=await import('crypto'); if(a.length!==b.length || !timingSafeEqual(a,b)) return NextResponse.json({error:'Senha incorreta.'},{status:401}); const response=NextResponse.json({ok:true}); response.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/',maxAge:8*60*60}); return response; } catch { return NextResponse.json({error:'Não foi possível entrar.'},{status:400}); } }

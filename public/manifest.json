@@ -1,0 +1,9 @@
+{
+  "name": "Abertura — Ingressos",
+  "short_name": "Abertura",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f9f7",
+  "theme_color": "#176b4d",
+  "description": "Ingressos digitais e validação de entrada."
+}

@@ -1,0 +1,24 @@
+ABERTURA - PACOTE REVISADO
+
+Esta versão corrige a configuração do alias @/ no tsconfig.json,
+que causava erros "Can't resolve '@/lib/...'" mesmo quando os arquivos existiam.
+Também mantém a correção do JSX em app/pedido/[id]/page.tsx e remove
+a rota antiga de webhook do Mercado Pago, não usada no fluxo de Pix manual.
+
+IMPORTANTE: EXTRAIA ESTE ZIP EM UMA PASTA NOVA. NÃO execute os comandos
+na pasta antiga abertura-v3\\abertura-v3.
+
+1. Abra no VS Code a pasta abertura-v3 extraída deste ZIP.
+2. No terminal PowerShell execute:
+   npm.cmd install
+   npm.cmd run typecheck
+   npm.cmd run build
+3. Para testar localmente:
+   npm.cmd run dev
+
+O banco Supabase já teve o esquema inicial criado. Ainda é preciso
+configurar .env.local com as credenciais privadas, testar compras e
+validação, configurar WhatsApp Business e fazer deploy HTTPS.
+NUNCA compartilhe .env.local ou SUPABASE_SERVICE_ROLE_KEY.
+
+NOTA: compilação não foi executada neste ambiente; valide os comandos acima.
