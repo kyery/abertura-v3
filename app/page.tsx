@@ -1,165 +1,61 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState, type FormEvent } from "react";
+import { TICKETS, type TicketKind } from "@/lib/pricing";
 
-type ValidationResult = {
-  ok: boolean;
-  message: string;
-  ticket?: {
-    id?: string;
-    buyer_name?: string;
-  };
-  alreadyUsed?: boolean;
-};
+export default function HomePage() {
+  const [kind, setKind] = useState<TicketKind>("individual");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-export default function ScannerPage() {
-  const host = useRef<HTMLDivElement>(null);
-  const scanner = useRef<any>(null);
-  const locked = useRef(false);
-  const mounted = useRef(true);
+  const selected = TICKETS[kind];
 
-  const [running, setRunning] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<ValidationResult | null>(null);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  async function validate(token: string) {
-    if (locked.current) return;
+    if (loading) return;
 
-    locked.current = true;
-    setBusy(true);
-    setResult(null);
-
-    // Pausa a leitura antes de enviar a validação.
-    try {
-      scanner.current?.pause(true);
-    } catch {
-      // A pausa da câmera não altera o resultado da validação.
-    }
+    setLoading(true);
+    setError("");
 
     try {
-      const response = await fetch("/api/validate", {
+      const response = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          kind,
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+        }),
       });
 
       const data = await response.json();
 
-      if (!mounted.current) return;
-
-      setResult({
-        ...data,
-        ok: response.ok && data.ok !== false,
-        alreadyUsed: response.status === 409,
-        message:
-          data.message ||
-          (response.status === 409
-            ? "Este ingresso já foi utilizado."
-            : response.ok
-              ? "Ingresso validado com sucesso."
-              : "Não foi possível validar o ingresso."),
-      });
-    } catch {
-      if (mounted.current) {
-        setResult({
-          ok: false,
-          message: "Falha de conexão. Verifique a internet e tente novamente.",
-        });
+      if (!response.ok) {
+        throw new Error(data.error || "Não foi possível criar o pedido.");
       }
-    } finally {
-      if (mounted.current) setBusy(false);
-    }
-  }
 
-  function extractToken(decoded: string) {
-    try {
-      const url = new URL(decoded);
-      return url.pathname.split("/").filter(Boolean).pop() || decoded;
-    } catch {
-      return decoded.trim();
-    }
-  }
+      if (!data.orderUrl || !data.orderUrl.startsWith("/pedido/")) {
+        throw new Error("O servidor não retornou um pedido válido.");
+      }
 
-  async function start() {
-    if (!host.current || scanner.current) return;
-
-    locked.current = false;
-    setResult(null);
-
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      const reader = new Html5Qrcode("qr-reader");
-      scanner.current = reader;
-
-      await reader.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 230, height: 230 } },
-        (decoded: string) => {
-          if (locked.current) return;
-          const token = extractToken(decoded);
-          if (token) void validate(token);
-        },
-        () => {}
+      window.location.assign(data.orderUrl);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Erro de conexão. Tente novamente."
       );
-
-      if (mounted.current) setRunning(true);
-    } catch {
-      scanner.current = null;
-      setRunning(false);
-      setResult({
-        ok: false,
-        message:
-          "Não foi possível abrir a câmera. Autorize o acesso e use HTTPS.",
-      });
+      setLoading(false);
     }
   }
-
-  async function stop() {
-    locked.current = true;
-
-    if (scanner.current) {
-      try {
-        await scanner.current.stop();
-      } catch {}
-
-      try {
-        scanner.current.clear();
-      } catch {}
-
-      scanner.current = null;
-    }
-
-    setRunning(false);
-  }
-
-  function nextTicket() {
-    if (busy) return;
-
-    setResult(null);
-    locked.current = false;
-
-    try {
-      scanner.current?.resume();
-    } catch {
-      void stop();
-    }
-  }
-
-  useEffect(() => {
-    mounted.current = true;
-
-    return () => {
-      mounted.current = false;
-      locked.current = true;
-
-      if (scanner.current) {
-        const reader = scanner.current;
-        scanner.current = null;
-        void reader.stop().catch(() => {});
-      }
-    };
-  }, []);
 
   return (
     <main className="wrap section">
@@ -168,81 +64,137 @@ export default function ScannerPage() {
       </a>
 
       <div className="panel" style={{ marginTop: 22 }}>
-        <div className="eyebrow">Portaria</div>
-        <h1>Leitor de ingressos</h1>
+        <div className="eyebrow">INGRESSOS ONLINE</div>
+
+        <h1>Garanta seu ingresso</h1>
 
         <p className="small">
-          Escaneie um ingresso por vez. Confira o resultado antes de
-          liberar a entrada.
+          Escolha seu ingresso, preencha seus dados e realize
+          o pagamento via Pix.
         </p>
 
-        <div id="qr-reader" ref={host} className="scanner" />
+        <form onSubmit={handleSubmit}>
+          <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
+            {(
+              Object.entries(TICKETS) as [
+                TicketKind,
+                (typeof TICKETS)[TicketKind]
+              ][]
+            ).map(([key, ticket]) => (
+              <label
+                key={key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: 18,
+                  border: kind === key
+                    ? "2px solid #167454"
+                    : "1px solid #d5ddd9",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="ticket"
+                  checked={kind === key}
+                  onChange={() => setKind(key)}
+                />
 
-        <div className="row" style={{ marginTop: 14 }}>
+                <span style={{ flex: 1 }}>
+                  <strong>{ticket.label}</strong>
+                  <span className="small" style={{ display: "block" }}>
+                    {ticket.quantity}{" "}
+                    {ticket.quantity === 1 ? "pessoa" : "pessoas"}
+                  </span>
+                </span>
+
+                <strong>
+                  {ticket.price.toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  })}
+                </strong>
+              </label>
+            ))}
+          </div>
+
+          <h2 style={{ marginTop: 28 }}>Seus dados</h2>
+
+          <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+            <label>
+              Nome completo
+              <input
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+                minLength={3}
+                maxLength={120}
+                autoComplete="name"
+                placeholder="Digite seu nome completo"
+                style={{ display: "block", width: "100%", padding: 12 }}
+              />
+            </label>
+
+            <label>
+              E-mail
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                maxLength={254}
+                autoComplete="email"
+                placeholder="seuemail@exemplo.com"
+                style={{ display: "block", width: "100%", padding: 12 }}
+              />
+            </label>
+
+            <label>
+              WhatsApp com DDD
+              <input
+                type="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                required
+                minLength={10}
+                maxLength={20}
+                autoComplete="tel"
+                placeholder="(98) 99999-9999"
+                style={{ display: "block", width: "100%", padding: 12 }}
+              />
+            </label>
+          </div>
+
+          {error && (
+            <div className="result invalid" style={{ marginTop: 18 }}>
+              {error}
+            </div>
+          )}
+
           <button
             className="btn"
-            onClick={running ? stop : start}
-            disabled={busy}
+            type="submit"
+            disabled={loading}
+            style={{ marginTop: 24, width: "100%" }}
           >
-            {running ? "Parar câmera" : "Ativar câmera"}
+            {loading
+              ? "Criando pedido..."
+              : `Continuar para o Pix — ${selected.price.toLocaleString(
+                  "pt-BR",
+                  { style: "currency", currency: "BRL" }
+                )}`}
           </button>
-
-          {running && result && (
-            <button
-              className="btn secondary"
-              onClick={nextTicket}
-              disabled={busy}
-            >
-              Ler próximo ingresso
-            </button>
-          )}
-        </div>
-
-        {busy && (
-          <p style={{ marginTop: 18 }}>
-            Validando ingresso...
-          </p>
-        )}
-
-        {result && (
-          <div
-            className={"result " + (!result.ok ? "invalid" : "")}
-            style={{ marginTop: 18 }}
-          >
-            <strong>
-              {result.ok
-                ? "ENTRADA LIBERADA"
-                : result.alreadyUsed
-                  ? "INGRESSO JÁ UTILIZADO"
-                  : "ENTRADA NÃO LIBERADA"}
-            </strong>
-
-            <p>{result.message}</p>
-
-            {result.ticket && (
-              <p className="small">
-                Ingresso: {result.ticket.id?.slice(0, 8)}
-                {result.ticket.buyer_name
-                  ? ` · ${result.ticket.buyer_name}`
-                  : ""}
-              </p>
-            )}
-          </div>
-        )}
+        </form>
 
         <p className="small" style={{ marginTop: 18 }}>
-          Cada ingresso permite uma única entrada. A validação é
-          registrada no servidor.
+          O pagamento é conferido pelo organizador. Após a confirmação,
+          os ingressos ficam disponíveis na página do pedido.
+          Cada ingresso possui um QR Code exclusivo para entrada.
         </p>
       </div>
-
-      <a
-        href="/admin"
-        className="btn secondary"
-        style={{ marginTop: 14 }}
-      >
-        Voltar ao painel
-      </a>
     </main>
   );
 }
